@@ -1,0 +1,206 @@
+Monitoring, Logging and Runtime Security
+
+Perform behavioral analytics to detect malicious activities
+Detect threats within physical infrastructure, apps, networks, data, users and workloads
+Investigate and identify phases of attack and bad actors within the environment
+Ensure immutability of containers at runtime
+Use Kubernetes audit logs to monitor access
+
+
+Performing behavioral analytics of system call (syscall) processes involves monitoring and analyzing the low-level interactions between an application and the operating system kernel to detect 
+deviations from normal behavior, which may indicate malicious activity.
+
+Operating system have a number of differnt layers. Each of these layers has its own privilges. We use protection rings term while mentioning this system. Operating systems manage computer resources,
+like processing time on the CPU and accessing the memory. Since computers run more than one software process, this will bring some issues. 
+
+Protection rings are one of the key solutions for sharing resources and hardware.
+
+So, what happens is that processes are executed in these protection rings, where each ring has its own access right to resources.
+On x86-64, the current privilege level is a number between 0 and 3 stored in the lower 2 bits of the special-purpose %cs register. When the kernel is running, (%cs & 3) == 0 and the CPU allows
+the execution of all instructions, including dangerous instructions. When a process is running, (%cs & 3) == 3 and the CPU does not execute dangerous instructions; instead, if it is asked to 
+execute a dangerous instruction, it raises a fault (a kind of exception), saves processor state, and starts running the kernel. This informs the kernel that a process tried to do something 
+illegal. The kernel will generally kill (stop) the offending process.
+
+%cs & 3	Meaning
+0	Kernel (full machine privilege)
+1–2	Unprivileged but unused in most operating systems
+3	User (unprivileged)
+
+Why do we need them?
+* First and foremost, it protects the system against crashes. For example, an application that we use in our comptuers can freeze or crash, however, we can recover them by restarting the application.
+Errors like these in higher rings are recoverable.
+  Because these program don't have direct access to memory or CPU. Only ring 0, the kernel has direct access to hardware resources. in this way, we can restart an application without losing data
+or causing an error in the CPU.
+
+* Furthermore, protection rings offer increased security. For example, a process can require some instruction that require more CPU resources. In such case, this process must rquest permission from 
+the OS. The OS can decide whether grant the request or deny it. This process protects the system from malicious behavior.
+
+Level of Proection Rings:
+1. Ring 0:
+  The kernel, which is at the heart of the operating system and has access to everything, can access Ring 0. The code runs here is said to be in kernel mode, kernel mode processes have the potential
+to affect the entire system. if something goes wrong here, the system would most likely crash. Because this ring has direct access to both CPU and memory.
+
+2. Ring 3:
+  User Processes running in user mode have access to Ring 3. Therefore, this is the least privilged ring this where well find the majority of our computer applications. since this ring does not
+have any access to the CPU or memory, any instructions involving these must be passed to ring 0.
+
+
+Process:
+All process start as user mode. there kernel is not a process. It's a controller of processes.
+
+Process Scheduling:
+The process scheduler is a part of the operating sytem that decides which process runs at a certain point in time. It usually ha sthe ability to pause a running proceses, move it to the back of the 
+running queue and start a new process; such a scheduler is known as preemptive scheduler, otherwise it is a cooperative scheduler.
+
+context Switching:
+The process by which the CPU is able to transition into executing another process.
+
+System Calls:
+In computing, a system call is the programmatic way in which a computer program requests a service from the kernel of the operating system. Basically system calls allow the RIng 3 processes
+to do privileged opeartions. System calls send a softwre IRQ to the CPU and the kernel performs the operations required.
+
+Interrupts:
+In system programming, interrupt is a signal to the processor emitted by hardware or software indicating an event that needs immediate attention. An interrupt alerts the processor to a high priority
+condition requiring the interruption of the current code the processor is executing.
+Interrupts allow an immediate request to be processed when the CPU is busy with something else.
+
+Processor time as resource:
+--------------------------
+
+One of the most fundamental machine resources is processor time (or CPU time); the fraction of time the processor spends executing one process's instructions rather than another's.  The kernel
+aims to to share processor time according to its policy.
+
+Here is a fundamental attack on fair sharing of processor time. It's the worst attack in the world.
+
+int main() {
+    while (true) {
+    }
+}
+
+An infinte loop. compiled to x86_64 insturctions.
+
+00000000000005fa <main>:
+ 5fa:   55                      push   %rbp
+ 5fb:   48 89 e5                mov    %rsp,%rbp
+ 5fe:   eb fe                   jmp    5fe <main+0x4>
+
+
+Proected control transfer:
+------------------------
+Recall how the stdio library functions invoke system call like read() and write(). a System call instruction was invoked and it only returns after the system call was finished.  This 
+syscall instruciton is a key interface via which user processes can interact with the kernel. It implements a form of Protected Control Transfers. It ransfers control of the processor to the
+kernel in safe and limited way.
+
+Types of system calls in Linux:
+-----------------------------
+1. Process management system calls
+2. File management system calls
+3. Device management system calls
+4. network management system calls
+5. system information system calls
+
+Process managment system calls:
+
+  fork()  - This create child process from the parent process which results in the exact same process except for some values like PID and PPID
+  exec() - This system call replace the current process image with the new image and it is used when you want to run a different program from the current process.
+  wait() - This system call will wait to the child rpocess to get terminated and then gives some information about the child process. The prime example of this would be the exit status.
+  exit() - This system call terminates the current process and returns the resources acquired by that process to the system.
+
+File system calls:
+
+  open() - it is used to open the file
+  read() - read data from a wide range of data types including regular files, and special files like pipe and sockets and it can also read from device files, like /dev/ directory.
+  write() - it is used to modify files, generate log files, reports, etc.
+  close() - close the file and save the changes to the disk (if any).
+
+Network system calls:
+
+  socket() - to create sockets which are endpoints for communication.
+  bind() - bind a socket to the specific address and port on the local network
+  listen() - used to mark the socket as a passive listener so it can accept incoming requests from the other hosts.
+  accept() - to accept the new incoming connection.
+  connect() - it establishes the connection to the external network endpoint
+  send() - to send data over the socket
+  recv() - to receiv data over the socket
+
+Device management system calls:
+
+  ioctl() - send control commands to the connected devices. 
+  mmap() - map the partition of a file into the memory of the own process.
+
+System information system calls:
+
+  getpid() 
+  getppid()
+  getuid()
+  getgid()
+  uname()
+  sysinfo()
+  time()
+
+
+Example:
+
+      test.c
+              fwrite("hello", 5,1,f)            // C standard library
+
+      glibc   fwrite()                          //wrapper for write library call
+              write()                           // will load teh system call id (which is 1 for write) and arg into the processor registers, and then cause the processor to switch
+                                                  to kernel level.
+      syscall table  0 sys_read
+                     1 sys_write
+                     2 sys_open
+                     3 sys_close
+                     4 sys_stat
+                     5 ssy_fstat
+      Processor                                 // The processor, now executing in kernel space, feeds teh system call ID to the syscall table, extract the function pointer at offset 1 and 
+                                                    calls it. This function, sys-write, is the kernel implementation of writing a file. 
+
+
+controlplane:~$ cat helloworld.s 
+.intel_syntax noprefix
+
+.section .rodata
+message:
+    .ascii  "hello\n"
+message_end:
+    .set    msg_len, message_end - message
+
+.section .text
+.global _start
+_start:
+    mov     eax, 1                # SYS_write
+    mov     edi, 1                # fd = 1 (stdout)
+    lea     rsi, [rip + message]  # &message (RIP-relative)
+    mov     edx, msg_len          # length
+    syscall
+
+    mov     eax, 60               # SYS_exit
+    xor     edi, edi
+    syscall
+controlplane:~$ gcc -o helloworld -nostdlib helloworld.s 
+controlplane:~$ ./helloworld 
+hello
+controlplane:~$ echo $?
+0
+
+Function calls instead.
+
+controlplane:~$ cat hello.c
+
+#include <sys/syscall.h>
+#include <unistd.h>
+
+int main() {
+    syscall(SYS_write, 1, "Hello, world\n", 13);
+    return 0;
+}
+
+controlplane:~$ gcc -o hello_syscall hello.c       
+controlplane:~$ ./hello_syscall 
+Hello, world
+controlplane:~$ echo $?
+0
+controlplane:~$ 
+
+
